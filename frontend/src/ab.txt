@@ -1,0 +1,7 @@
+
+<img
+            src="https://i.ibb.co/twYQhJHq/gfg-removebg-preview.png"
+            alt="clipboard"
+            style={{ cursor: "pointer", height: 30 }}
+            onClick={() => onNavClick("task")}
+          />
