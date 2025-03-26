@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast, ToastContainer } from "react-toastify";
 import apis from "../../apis";
 import axios from "axios";
- 
 
 function SignUp() {
   const nameInput = useRef();
@@ -22,8 +21,16 @@ function SignUp() {
     const contact = contactInput.current.value.trim();
     const address = addressInput.current.value.trim();
 
+    // ✅ Validation for empty fields
     if (!name || !email || !password || !contact || !address) {
       toast.warn("⚠️ All fields are required!");
+      return;
+    }
+
+    // ✅ Validation for 10-digit contact number
+    const contactRegex = /^[0-9]{10}$/;
+    if (!contactRegex.test(contact)) {
+      toast.error("📱 Contact number must be exactly 10 digits!");
       return;
     }
 

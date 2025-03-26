@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import { useSelector } from "react-redux";
-import DynamicNav from "./Dynamicnav";
-import LobbyScreen from "../Screens/Lobby";
-import RoomPage from "../Screens/Room";
-import TaskComponent from "../Div/TaskComponent";
-import TaskForm from "./Taskform";
-import { fetchTasks, createTask, updateTask, deleteTask } from "../Div/api/Task.api";
+import { fetchTasks, createTask, updateTask } from "../Div/api/Task.api";
+
+ const DynamicNav = lazy(() => import("./Dynamicnav"));
+const LobbyScreen = lazy(() => import("../Screens/Lobby"));
+const RoomPage = lazy(() => import("../Screens/Room"));
+const TaskForm = lazy(() => import("./Taskform"));
 
 const Meet = () => {
   const currentSection = useSelector((state) => state.section.currentSection);
@@ -14,18 +14,23 @@ const Meet = () => {
   const [loading, setLoading] = useState(false);
   const [activeRoom, setActiveRoom] = useState(null);
 
-  useEffect(() => {
-    const loadTasks = async () => {
-      setLoading(true);
-      try {
-        const tasks = await fetchTasks();
-        setTaskData(Array.isArray(tasks) ? tasks : []);
-      } catch (error) {
-        console.error("Failed to load tasks:", error);
-      } finally {
-        setLoading(false);
+  const loadTasks = async () => {
+    setLoading(true);
+    try {
+      const result = await fetchTasks();
+      if (result.success) {
+        setTaskData(result.data);
+      } else {
+        console.error(result.message);
       }
-    };
+    } catch (error) {
+      console.error("Error loading tasks: ", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadTasks();
   }, []);
 
@@ -36,73 +41,56 @@ const Meet = () => {
 
   const navData = {
     Task: [
-      { 
-        name: "Create Task", 
+      {
+        name: "Create Task",
         action: () => setSelectedComponent(
-          <TaskForm 
-            onSubmit={async (formData) => {
-              await createTask(formData);
-              const tasks = await fetchTasks();
-              setTaskData(tasks);
-            }} 
-            buttonText="Create Task" 
-            mode="create"
-          />
-        )
-      },{ 
-        name: "Task", 
-        action: () => setSelectedComponent(
-          <TaskForm 
-            onSubmit={async (formData) => {
-              await fetchTasks();
-              const tasks = await fetchTasks();
-              setTaskData(tasks);
-            }} 
-            buttonText="Create Task" 
-            mode="See"
-          />
+          <Suspense fallback={<div>Loading...</div>}>
+            <TaskForm 
+              onSubmit={async (formData) => {
+                await createTask(formData);
+                await loadTasks();
+              }} 
+              buttonText="Create Task" 
+              mode="create"
+            />
+          </Suspense>
         )
       },
-      { 
-        name: "Update Task", 
+      {
+        name: "Update Task",
         action: () => setSelectedComponent(
-          <TaskForm
-            initialData={taskData[0]} // Pass actual task data
-            onSubmit={async (taskId, formData) => {
-              await updateTask(taskId, formData);
-              const tasks = await fetchTasks();
-              setTaskData(tasks);
-            }}
-            buttonText="Update Task"
-            mode="update"
-          />
-        )
-      },
-      { 
-        name: "Delete Task", 
-        action: () => setSelectedComponent(
-          <TaskComponent 
-            items={taskData} 
-            onDelete={async (taskId) => {
-              await deleteTask(taskId);
-              const tasks = await fetchTasks();
-              setTaskData(tasks);
-            }}
-          />
-        )
-      },
+          <Suspense fallback={<div>Loading...</div>}>
+            <TaskForm
+              initialData={taskData[0]}
+              onSubmit={async (formData) => {
+                if (taskData[0]?._id) {
+                  await updateTask(taskData[0]._id, formData);
+                  await loadTasks();
+                }
+              }}
+              buttonText="Update Task"
+              mode="update"
+            />
+          </Suspense>
+        ),
+        disabled: taskData.length === 0
+      }
     ],
     Meet: [
-      { 
-        name: "Lobby", 
+      {
+        name: "Lobby",
         action: () => setSelectedComponent(
-          <LobbyScreen onRoomJoin={handleRoomJoin} />
+          <Suspense fallback={<div>Loading...</div>}>
+            <LobbyScreen onRoomJoin={handleRoomJoin} />
+          </Suspense>
         )
       },
-      { 
-        name: "Active Call", 
+      {
+        name: "Active Call",
         action: () => activeRoom && setSelectedComponent(
-          <RoomPage roomId={activeRoom} />
+          <Suspense fallback={<div>Loading...</div>}>
+            <RoomPage roomId={activeRoom} />
+          </Suspense>
         ),
         disabled: !activeRoom
       }
@@ -111,10 +99,13 @@ const Meet = () => {
 
   return (
     <div style={{ minHeight: "100vh", overflow: "hidden" }}>
-      <DynamicNav 
-        navItems={navData[currentSection] || []} 
-        onSelect={setSelectedComponent}
-      />
+      <Suspense fallback={<div>Loading Navigation...</div>}>
+        <DynamicNav 
+          navItems={navData[currentSection] || []} 
+          onSelect={setSelectedComponent}
+        />
+      </Suspense>
+
       <div style={{ 
         marginTop: "30px", 
         padding: "20px", 
@@ -133,6 +124,23 @@ const Meet = () => {
         ) : selectedComponent || (
           <div className="text-muted text-center py-5">
             <h2>Select a section to begin</h2>
+            {currentSection === "Task" && taskData.length > 0 && (
+              <div style={{ marginTop: "20px" }}>
+                <h4>Your Tasks:</h4>
+                <ul style={{ listStyle: "none", padding: 0 }}>
+                  {taskData.map(task => (
+                    <li key={task._id} style={{ 
+                      padding: "10px", 
+                      margin: "5px 0", 
+                      backgroundColor: "#f5f5f5",
+                      borderRadius: "4px"
+                    }}>
+                      {task.taskName} - {task.isDone ? "✅ Completed" : "🟡 Pending"}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
       </div>

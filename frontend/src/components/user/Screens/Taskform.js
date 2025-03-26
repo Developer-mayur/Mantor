@@ -1,77 +1,109 @@
-import React, { useState, useEffect } from "react";
+ import React, { useState, useEffect } from "react";
+import { fetchTasks, fetchTask, createTask, updateTask } from "../Div/api/Task.api";
+import { toast } from "react-toastify";
 
-const TaskForm = ({ 
-  onSubmit, 
-  buttonText, 
-  initialData = {}, 
-  mode = "create", 
-  onDelete 
-}) => {
+const TaskForm = ({ mode = "create" }) => {
   const [taskName, setTaskName] = useState("");
-  const [isDone, setIsDone] = useState(false);
-  const [taskId, setTaskId] = useState("");
+  const [tasks, setTasks] = useState([]);
+  const [selectedTaskId, setSelectedTaskId] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
+  // Fetch tasks when component mounts
   useEffect(() => {
-    if (initialData && Object.keys(initialData).length > 0) {
-      setTaskName(initialData.taskName || "");
-      setIsDone(initialData.isDone || false);
-      setTaskId(initialData.taskid || "");
+    const loadTasks = async () => {
+      try {
+        const response = await fetchTasks();
+        if (response.success) {
+          setTasks(response.data.data);
+        }
+      } catch (error) {
+        setError("Failed to load tasks");
+      }
+    };
+    
+    if (mode === "update") loadTasks();
+  }, [mode]);
+
+  // Handle task selection for update mode
+  const handleTaskSelect = async (taskId) => {
+    try {
+      const response = await fetchTask(taskId);
+      if (response.success) {
+        setSelectedTaskId(taskId);
+        setTaskName(response.data.taskName);
+      }
+    } catch (error) {
+      setError("Failed to load task details");
     }
-  }, [initialData]);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const formData = { taskName, isDone };
-
-    if (mode === "create") {
-      onSubmit(formData); // ✅ Only pass formData
-    } else if (mode === "update") {
-      onSubmit(taskId, formData); // ✅ Pass taskId + formData
-    }
-
-    setTaskName("");
-    setIsDone(false);
   };
 
-  const handleDelete = (e) => {
+  // Form submission handler
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (onDelete && taskId) {
-      onDelete(taskId); // ✅ Only pass taskId
+    setError("");
+    setLoading(true);
+
+    try {
+      if (mode === "create") {
+        const response = await createTask({ taskName });
+        if (response.success) {
+          toast.success("Task created successfully!");
+          setTaskName("");
+        }
+      } else if (mode === "update") {
+        const response = await updateTask(selectedTaskId, { taskName });
+        if (response.success) {
+          toast.success("Task updated successfully!");
+        }
+      }
+    } catch (error) {
+      setError(error.message || "Operation failed");
+      toast.error("Operation failed!");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div style={{ padding: "20px", maxWidth: "400px", margin: "0 auto" }}>
-      <h2>{mode === "create" ? "Create Task" : "Update Task"}</h2>
+    <div className="task-form">
+      <h2>{mode === "create" ? "Create New Task" : "Edit Task"}</h2>
+
+      {mode === "update" && (
+        <div className="task-selector">
+          <label>Select Task:</label>
+          <select 
+            value={selectedTaskId}
+            onChange={(e) => handleTaskSelect(e.target.value)}
+            disabled={loading}
+          >
+            <option value="">-- Select a task --</option>
+            {tasks.map(task => (
+              <option key={task._id} value={task._id}>
+                {task.taskName}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
-        <div>
+        <div className="form-group">
           <label>Task Name:</label>
-          <input 
-            type="text" 
-            value={taskName} 
-            onChange={(e) => setTaskName(e.target.value)} 
-            required 
+          <input
+            type="text"
+            value={taskName}
+            onChange={(e) => setTaskName(e.target.value)}
+            required
+            disabled={loading}
           />
         </div>
 
-        <div>
-          <label>Status:</label>
-          <select
-            value={isDone ? "true" : "false"}
-            onChange={(e) => setIsDone(e.target.value === "true")}
-            required
-          >
-            <option value="false">Pending</option>
-            <option value="true">Completed</option>
-          </select>
-        </div>
+        {error && <div className="error">{error}</div>}
 
-        <button type="submit">{buttonText}</button>
-
-        {mode === "update" && (
-          <button type="button" onClick={handleDelete} style={{ marginLeft: "10px" }}>Delete</button>
-        )}
+        <button type="submit" disabled={loading}>
+          {loading ? "Processing..." : mode === "create" ? "Create Task" : "Update Task"}
+        </button>
       </form>
     </div>
   );

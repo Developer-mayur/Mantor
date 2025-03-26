@@ -1,6 +1,6 @@
 import { Task } from "../model/TaskModel.js"
 import { User } from "../model/user.model.js";
-
+import mongoose from "mongoose";
 // ✅ CREATE TASK
 export const createTask = async (req, res) => {
     try {
@@ -75,49 +75,73 @@ export const fetchAllTasks = async (req, res) => {
     }
 };
 
-// ✅ UPDATE TASK
+ 
+
+
 export const updateTaskById = async (req, res) => {
     try {
         const { taskId, userId } = req.params;
         const updateData = req.body;
 
-        // 🚀 Allow only taskName & isDone updates
-        const allowedUpdates = ["taskName", "isDone"];
-        const isValidUpdate = Object.keys(updateData).every((key) =>
-            allowedUpdates.includes(key)
-        );
+        // Debug logging
+        console.log('Update request received:', {
+            taskId,
+            userId,
+            updateData
+        });
 
-        if (!isValidUpdate) {
+        // Validate ObjectIDs
+        if (!mongoose.isValidObjectId(taskId) || !mongoose.isValidObjectId(userId)) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid updates! Only taskName and isDone allowed",
+                message: "Invalid ID format",
+                receivedIds: { taskId, userId }
             });
         }
 
+        // Perform update
         const task = await Task.findOneAndUpdate(
-            { _id: taskId, userId },
-            updateData,
+            { _id: new mongoose.Types.ObjectId(taskId), userId: new mongoose.Types.ObjectId(userId) },
+            { $set: updateData },
             { new: true, runValidators: true }
         );
 
+        // Debug logging
+        console.log('Update result:', task);
+
         if (!task) {
-            return res.status(404).json({
+            // Check if user exists
+            const userExists = await User.exists({ _id: userId });
+            if (!userExists) {
+                return res.status(404).json({
+                    success: false,
+                    message: "User not found"
+                });
+            }
+
+            // Check if task exists
+            const taskExists = await Task.exists({ _id: taskId });
+            return res.status(taskExists ? 403 : 404).json({
                 success: false,
-                message: "Task not found or unauthorized",
+                message: taskExists 
+                    ? "Task exists but doesn't belong to this user" 
+                    : "Task not found"
             });
         }
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             message: "Task updated successfully",
-            data: task,
+            data: task
         });
+
     } catch (err) {
-        console.error("Update Task Error:", err);
-        res.status(500).json({
+        console.error("Update error:", err);
+        return res.status(500).json({
             success: false,
-            message: "Failed to update task",
+            message: "Server error during update",
             error: err.message,
+            ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
         });
     }
 };
